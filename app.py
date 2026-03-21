@@ -182,20 +182,25 @@ h1,h2,h3,h4{color:#0f172a;}
 }
 [data-testid="stSidebar"] hr{border-color: rgba(255,255,255,0.12) !important;}
 
-/* ── File uploader inside sidebar: keep text dark ── */
-[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
-[data-testid="stSidebar"] [data-testid="stFileUploader"] p,
-[data-testid="stSidebar"] [data-testid="stFileUploader"] div,
-[data-testid="stSidebar"] [data-testid="stFileUploader"] small,
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] span,
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] p,
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] div{
-  color: #0f172a !important;
-}
+/* ── File uploader dropzone: white bg, dark text ── */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]{
   background: #ffffff !important;
   border: 1px solid #cbd5e1 !important;
   border-radius: 10px !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] span,
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] p,
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] div,
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] small,
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button{
+  color: #0f172a !important;
+}
+/* ── Uploaded filename row: keep text white ── */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderFileName"],
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="uploadedFile"] span,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="uploadedFile"] div,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="fileName"]{
+  color: #f1f5f9 !important;
 }
 
 /* ── DataFrames ── */
