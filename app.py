@@ -616,6 +616,40 @@ if generate:
                     use_container_width=True,
                 )
 
+            # ── Download All ──
+            kpi_rows = [
+                ("Report Type",    "Deal P&L"),
+                ("Date Range",     f"{from_date} → {to_date}"),
+                ("Total Clients",  kpis["total_clients"]),
+                ("Net Client PnL", f"${kpis['total_pnl']:,.2f}"),
+                ("Total Profit",   f"${kpis['total_profit']:,.2f}"),
+                ("Total Loss",     f"${kpis['total_loss']:,.2f}"),
+                ("Closed Lots",    f"{kpis['total_lots']:,.2f}"),
+                ("Volume USD",     f"${kpis['total_volume']:,.0f}"),
+                ("Total Trades",   kpis["total_trades"]),
+                ("Avg Hit Ratio",  f"{kpis['avg_hit_ratio']:.1f}%"),
+            ]
+            kpi_summary = pd.DataFrame(kpi_rows, columns=["Metric", "Value"])
+
+            buf_all = BytesIO()
+            with pd.ExcelWriter(buf_all, engine="openpyxl") as w:
+                kpi_summary.to_excel(w, index=False, sheet_name="KPI Summary")
+                get_top_gainers(report, 50).to_excel(w, index=False, sheet_name="Top 50 Gainers")
+                get_top_losers(report, 50).to_excel(w, index=False, sheet_name="Top 50 Losers")
+                report.to_excel(w, index=False, sheet_name="Full Client Report")
+                if not group_df.empty:
+                    group_df.to_excel(w, index=False, sheet_name="Group Summary")
+                if not symbol_df.empty:
+                    symbol_df.to_excel(w, index=False, sheet_name="Symbol Breakdown")
+            buf_all.seek(0)
+            st.download_button(
+                "Download All — Full Report (Excel)",
+                data=buf_all,
+                file_name=f"DealPnL_FULL_{from_date}_to_{to_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
         except Exception as e:
             st.error(f"❌ Error generating report: {e}")
             import traceback
@@ -884,6 +918,44 @@ if generate:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
+
+            # ── Download All ──
+            eq_kpi_rows = [
+                ("Report Type",        "Equity P&L"),
+                ("Opening Equity Date", str(oe_date)),
+                ("Closing Equity Date", str(ce_date)),
+                ("Total Accounts",     eq_kpis["total_accounts"]),
+                ("Opening Equity",     f"${eq_kpis['total_oe']:,.2f}"),
+                ("Closing Equity",     f"${eq_kpis['total_ce']:,.2f}"),
+                ("Net D/W",            f"${eq_kpis['total_net_dw']:,.2f}"),
+                ("Net Credit",         f"${eq_kpis['total_net_credit']:,.2f}"),
+                ("Bonus",              f"${eq_kpis['total_bonus']:,.2f}"),
+                ("Net P&L",            f"${eq_kpis['total_net_pnl']:,.2f}"),
+                ("Profitable Accounts", eq_kpis["profitable_accounts"]),
+                ("Losing Accounts",    eq_kpis["losing_accounts"]),
+            ]
+            eq_kpi_summary = pd.DataFrame(eq_kpi_rows, columns=["Metric", "Value"])
+
+            buf_all = BytesIO()
+            with pd.ExcelWriter(buf_all, engine="openpyxl") as w:
+                eq_kpi_summary.to_excel(w, index=False, sheet_name="KPI Summary")
+                eq_report.sort_values("Net P&L", ascending=False).head(50).to_excel(
+                    w, index=False, sheet_name="Top 50 Gainers"
+                )
+                eq_report.sort_values("Net P&L", ascending=True).head(50).to_excel(
+                    w, index=False, sheet_name="Top 50 Losers"
+                )
+                eq_report.to_excel(w, index=False, sheet_name="Full Account Report")
+                if not eq_groups.empty:
+                    eq_groups.to_excel(w, index=False, sheet_name="Group Summary")
+            buf_all.seek(0)
+            st.download_button(
+                "Download All — Full Report (Excel)",
+                data=buf_all,
+                file_name=f"EquityPnL_FULL_{oe_date}_to_{ce_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
 
         except Exception as e:
             st.error(f"❌ Error generating equity report: {e}")
