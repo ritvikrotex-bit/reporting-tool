@@ -713,11 +713,15 @@ if generate:
                 st.stop()
 
             # ── Fetch group data ──
-            all_logins = set()
+            data_logins = set()
             for dicts in (oe_dicts, ce_dicts, summary_dicts):
-                all_logins.update(d["Login"] for d in dicts)
+                data_logins.update(d["Login"] for d in dicts)
             if account_filter:
-                all_logins = all_logins.intersection(set(account_filter))
+                missed_logins = sorted(set(account_filter) - data_logins)
+                all_logins = data_logins.intersection(set(account_filter))
+            else:
+                missed_logins = []
+                all_logins = data_logins
 
             logins_list = list(all_logins)
             with st.spinner(f"Fetching group data for {len(logins_list):,} logins…"):
@@ -737,6 +741,12 @@ if generate:
                 st.warning("No equity data found for the selected accounts and dates.")
                 disconnect_mt5(manager)
                 st.stop()
+
+            # ── Missed accounts warning ──
+            if missed_logins:
+                with st.expander(f"⚠️ {len(missed_logins):,} account(s) from your filter had no snapshot data for the selected dates"):
+                    missed_df = pd.DataFrame({"Login (not in report)": missed_logins})
+                    st.dataframe(missed_df, use_container_width=True, hide_index=True)
 
             # ════════════════════════════════
             # KPI OVERVIEW
@@ -910,6 +920,10 @@ if generate:
                     eq_report.to_excel(w, index=False, sheet_name="Equity PnL")
                     if not eq_groups.empty:
                         eq_groups.to_excel(w, index=False, sheet_name="Group Summary")
+                    if missed_logins:
+                        pd.DataFrame({"Login (Not Fetched)": missed_logins}).to_excel(
+                            w, index=False, sheet_name="Not Fetched"
+                        )
                 buf.seek(0)
                 st.download_button(
                     "Download Excel",
@@ -948,6 +962,10 @@ if generate:
                 eq_report.to_excel(w, index=False, sheet_name="Full Account Report")
                 if not eq_groups.empty:
                     eq_groups.to_excel(w, index=False, sheet_name="Group Summary")
+                if missed_logins:
+                    pd.DataFrame({"Login (Not Fetched)": missed_logins}).to_excel(
+                        w, index=False, sheet_name="Not Fetched"
+                    )
             buf_all.seek(0)
             st.download_button(
                 "Download All — Full Report (Excel)",
