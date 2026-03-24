@@ -232,6 +232,12 @@ def compute_equity_report(
             rec = ce_idx.loc[login]
             ce_val = float(rec["ProfitEquity"].iloc[-1] if isinstance(rec, pd.DataFrame) else rec["ProfitEquity"])
 
+        # Rule: negative equity → zero out OE, CE and Net P&L
+        negative_equity = oe_val < 0 or ce_val < 0
+        if negative_equity:
+            oe_val = 0.0
+            ce_val = 0.0
+
         # Aggregations over summary period
         deposits = withdrawals = credit_in = credit_out = bonus = 0.0
         if sm_grp is not None and login in sm_grp.groups:
@@ -248,6 +254,8 @@ def compute_equity_report(
         net_credit = credit_in + credit_out
         difference = ce_val - oe_val
         net_pnl    = difference - net_dw - net_credit - bonus
+        if negative_equity:
+            net_pnl = 0.0
 
         rows.append({
             "Login":          login,
