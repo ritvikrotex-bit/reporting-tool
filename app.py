@@ -34,6 +34,18 @@ from calculations import (
     compute_equity_group_summary,
     compute_equity_kpis,
 )
+from db import (
+    init_db,
+    verify_user,
+    change_password,
+    get_mt5_profiles,
+    get_mt5_profile_decrypted,
+    save_mt5_profile,
+    delete_mt5_profile,
+    list_users,
+    create_user,
+    delete_user,
+)
 
 # ═══════════════════════════════════════════════════════════
 # PAGE CONFIG & GLOBAL CSS
@@ -43,6 +55,73 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ═══════════════════════════════════════════════════════════
+# AUTH GATE
+# ═══════════════════════════════════════════════════════════
+init_db()
+
+if "authenticated" not in st.session_state:
+    st.session_state.update(
+        authenticated=False,
+        user_id=None,
+        username=None,
+        is_admin=False,
+        must_change_pw=False,
+    )
+
+
+def _render_login_screen():
+    st.markdown(
+        "<style>.block-container{max-width:440px!important;padding-top:6rem!important;}</style>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("## Reporting Tool")
+    st.markdown("##### Sign in to continue")
+    with st.form("login_form"):
+        uname = st.text_input("Username")
+        pwd   = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Sign In", use_container_width=True)
+    if submitted:
+        user = verify_user(uname, pwd)
+        if user:
+            st.session_state.update(
+                authenticated=True,
+                user_id=user["id"],
+                username=user["username"],
+                is_admin=bool(user["is_admin"]),
+                must_change_pw=bool(user["must_change_pw"]),
+            )
+            st.rerun()
+        else:
+            st.error("Invalid username or password.")
+    st.stop()
+
+
+def _render_change_password_screen():
+    st.markdown("## Change Password Required")
+    st.info("You must set a new password before continuing.")
+    with st.form("change_pw_form"):
+        new_pw  = st.text_input("New Password", type="password")
+        confirm = st.text_input("Confirm Password", type="password")
+        submitted = st.form_submit_button("Set Password", use_container_width=True)
+    if submitted:
+        if len(new_pw) < 8:
+            st.error("Password must be at least 8 characters.")
+        elif new_pw != confirm:
+            st.error("Passwords do not match.")
+        else:
+            change_password(st.session_state.user_id, new_pw)
+            st.session_state.must_change_pw = False
+            st.rerun()
+    st.stop()
+
+
+if not st.session_state.authenticated:
+    _render_login_screen()
+
+if st.session_state.must_change_pw:
+    _render_change_password_screen()
 
 st.markdown(
     """
@@ -234,12 +313,44 @@ h1,h2,h3,h4{color:#0f172a;}
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════
 with st.sidebar:
+    # ── Session header ──
+    col_u, col_lo = st.columns([3, 1])
+    with col_u:
+        st.markdown(f"**{st.session_state.username}**")
+    with col_lo:
+        if st.button("Logout", use_container_width=True):
+            st.session_state.update(
+                authenticated=False, user_id=None,
+                username=None, is_admin=False, must_change_pw=False,
+            )
+            st.rerun()
+    st.divider()
+
+    # ── MT5 Connection ──
     st.markdown("## MT5 Connection")
-    st.caption("Enter your MT5 Manager API credentials.")
+
+    # Saved configs selector
+    _profiles = get_mt5_profiles(st.session_state.user_id)
+    _profile_names = ["-- Enter manually --"] + [p["name"] for p in _profiles]
+    _sel_name = st.selectbox("Saved Configs", _profile_names)
+
+    _prefill_server   = ""
+    _prefill_login    = 0
+    _prefill_password = ""
+    if _sel_name != "-- Enter manually --":
+        _matched = next((p for p in _profiles if p["name"] == _sel_name), None)
+        if _matched:
+            _resolved = get_mt5_profile_decrypted(_matched["id"], st.session_state.user_id)
+            if _resolved:
+                _prefill_server   = _resolved["server"]
+                _prefill_login    = _resolved["mt5_login"]
+                _prefill_password = _resolved["mt5_password"]
+
     st.divider()
 
     server = st.text_input(
         "Server (IP:Port)",
+        value=_prefill_server,
         placeholder="e.g. 188.240.63.240:443",
         help="MT5 server address with port",
     )
@@ -247,14 +358,37 @@ with st.sidebar:
         "Manager Login",
         min_value=0,
         step=1,
-        value=0,
+        value=_prefill_login,
         help="Your MT5 Manager login ID",
     )
     password = st.text_input(
         "Password",
+        value=_prefill_password,
         type="password",
         help="MT5 Manager password",
     )
+
+    # ── Save / manage config ──
+    with st.expander("Save as Config"):
+        _save_name = st.text_input("Config name", placeholder="e.g. Main Broker", key="save_cfg_name")
+        if st.button("Save", key="btn_save_cfg", use_container_width=True):
+            if not _save_name.strip():
+                st.error("Enter a config name.")
+            elif not server or login == 0 or not password:
+                st.error("Fill in all credentials before saving.")
+            else:
+                save_mt5_profile(st.session_state.user_id, _save_name.strip(), server, int(login), password)
+                st.success(f"Saved as '{_save_name.strip()}'")
+                st.rerun()
+
+    if _sel_name != "-- Enter manually --":
+        _matched = next((p for p in _profiles if p["name"] == _sel_name), None)
+        if _matched:
+            with st.expander("Manage Config"):
+                st.caption(f"Selected: **{_sel_name}**")
+                if st.button("Delete this config", key="btn_del_cfg", use_container_width=True):
+                    delete_mt5_profile(_matched["id"], st.session_state.user_id)
+                    st.rerun()
 
     st.divider()
     st.markdown("### Report Type")
@@ -337,6 +471,57 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+# ═══════════════════════════════════════════════════════════
+# ADMIN PANEL
+# ═══════════════════════════════════════════════════════════
+if st.session_state.is_admin:
+    with st.expander("Admin — User Management", expanded=False):
+        st.markdown("#### Users")
+        _users = list_users()
+        for _u in _users:
+            _col1, _col2, _col3 = st.columns([3, 1, 1])
+            with _col1:
+                _badge = "Admin" if _u["is_admin"] else "User"
+                st.markdown(f"**{_u['username']}** &nbsp; `{_badge}`")
+            with _col2:
+                st.caption(_u["created_at"][:10])
+            with _col3:
+                _is_self = _u["id"] == st.session_state.user_id
+                _admin_count = sum(1 for x in _users if x["is_admin"])
+                _last_admin  = _u["is_admin"] and _admin_count == 1
+                if not _is_self and not _last_admin:
+                    if st.button("Delete", key=f"del_user_{_u['id']}", use_container_width=True):
+                        delete_user(_u["id"])
+                        st.rerun()
+                else:
+                    st.caption("—")
+
+        st.divider()
+        st.markdown("#### Create User")
+        with st.form("create_user_form"):
+            _new_uname  = st.text_input("Username")
+            _new_pw     = st.text_input("Password", type="password")
+            _new_admin  = st.checkbox("Admin")
+            _new_change = st.checkbox("Force password change on first login", value=True)
+            _created    = st.form_submit_button("Create", use_container_width=True)
+        if _created:
+            if not _new_uname.strip() or not _new_pw:
+                st.error("Username and password are required.")
+            else:
+                try:
+                    create_user(_new_uname.strip(), _new_pw, is_admin=int(_new_admin))
+                    if _new_change:
+                        from db import _conn, _hash_pw
+                        with _conn() as _c:
+                            _c.execute(
+                                "UPDATE app_users SET must_change_pw=1 WHERE username=?",
+                                (_new_uname.strip(),),
+                            )
+                    st.success(f"User '{_new_uname.strip()}' created.")
+                    st.rerun()
+                except ValueError as _e:
+                    st.error(str(_e))
 
 
 # ═══════════════════════════════════════════════════════════
