@@ -140,7 +140,7 @@ def get_users(
                 lgn   = _field(row, "Login",  "login")
                 group = _field(row, "Group",  "group", default="")
                 if lgn is not None:
-                    user_map[int(lgn)] = str(group or "")
+                    user_map[int(lgn)] = group.decode() if isinstance(group, bytes) else str(group or "")
             return user_map, None
     except Exception:
         pass
@@ -153,7 +153,7 @@ def get_users(
                 user_map[int(lgn)] = ""
             else:
                 group = _field(user, "Group", "group", default="")
-                user_map[int(lgn)] = str(group or "")
+                user_map[int(lgn)] = group.decode() if isinstance(group, bytes) else str(group or "")
         except Exception:
             user_map[int(lgn)] = ""
 
