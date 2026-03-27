@@ -205,6 +205,7 @@ h1,h2,h3,h4{color:#0f172a;}
 .metric .v.red{color:#dc2626 !important;}
 .metric .v.blue{color:#2563eb !important;}
 
+
 /* ── Sidebar ── */
 [data-testid="stSidebar"]{
   background: linear-gradient(180deg, #0b1220 0%, #111827 100%) !important;
@@ -299,6 +300,17 @@ h1,h2,h3,h4{color:#0f172a;}
   color: #0f172a !important;
 }
 .stSelectbox > div > div{border-radius:10px !important;}
+/* ── Sidebar selectbox text fix ── */
+[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div,
+[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] span,
+[data-testid="stSidebar"] .stSelectbox [class*="placeholder"],
+[data-testid="stSidebar"] .stSelectbox [class*="singleValue"]{
+  color: #f1f5f9 !important;
+}
+[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div{
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
 .stButton > button{
   border-radius:12px !important;
   font-weight:700 !important;
@@ -314,16 +326,16 @@ h1,h2,h3,h4{color:#0f172a;}
 # ═══════════════════════════════════════════════════════════
 with st.sidebar:
     # ── Session header ──
-    col_u, col_lo = st.columns([3, 1])
-    with col_u:
-        st.markdown(f"**{st.session_state.username}**")
-    with col_lo:
-        if st.button("Logout", use_container_width=True):
-            st.session_state.update(
-                authenticated=False, user_id=None,
-                username=None, is_admin=False, must_change_pw=False,
-            )
-            st.rerun()
+    st.markdown(
+        f"<p style='font-size:1.15rem;font-weight:700;color:#f1f5f9;margin:6px 0 4px 0;'>{st.session_state.username}</p>",
+        unsafe_allow_html=True,
+    )
+    if st.button("Logout", use_container_width=True):
+        st.session_state.update(
+            authenticated=False, user_id=None,
+            username=None, is_admin=False, must_change_pw=False,
+        )
+        st.rerun()
     st.divider()
 
     # ── MT5 Connection ──

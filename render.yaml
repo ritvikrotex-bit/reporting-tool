@@ -1,0 +1,19 @@
+# Render deployment config — MT5 P&L Studio Backend
+# IMPORTANT: MT5Manager SDK is Windows-only (C++ DLL).
+# Render runs Linux containers, so MT5Manager CANNOT be imported there.
+# Use this config on a Windows VPS (Azure/AWS EC2 Windows) with Render-like startup,
+# OR use this as reference for any WSGI/ASGI host that supports Windows.
+#
+# If you need a Render-native deploy, expose your backend via ngrok from your
+# Windows machine and point Streamlit Cloud to that URL instead.
+
+services:
+  - type: web
+    name: mt5-studio-backend
+    runtime: python
+    buildCommand: pip install -r requirements_backend.txt
+    startCommand: uvicorn backend:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+    healthCheckPath: /health

@@ -106,7 +106,7 @@ def verify_user(username: str, password: str) -> Optional[dict]:
     """Return user dict on success, None on failure."""
     with _conn() as con:
         row = con.execute(
-            "SELECT id, username, is_admin, must_change_pw FROM app_users WHERE username=? AND password_hash=?",
+            "SELECT id, username, is_admin, must_change_pw FROM app_users WHERE LOWER(username)=LOWER(?) AND password_hash=?",
             (username.strip(), _hash_pw(password)),
         ).fetchone()
     return dict(row) if row else None
