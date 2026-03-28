@@ -52,9 +52,21 @@ from db import (
 # ═══════════════════════════════════════════════════════════
 st.set_page_config(
     page_title="Reporting Tool",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# PWA meta tags — makes the app installable on mobile
+st.markdown("""
+<link rel="manifest" href="/app/static/manifest.json">
+<meta name="theme-color" content="#3b82f6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Reporting Tool">
+<link rel="apple-touch-icon" href="/app/static/icon-192.png">
+""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
 # AUTH GATE

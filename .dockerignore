@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+.git
+*.db
+*.xlsx
+*.csv
+.claude/
+logs/
+bases/
+files/
+MetaTrader5SDK/
