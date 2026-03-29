@@ -577,6 +577,133 @@ def _load_account_filter(uploaded_file) -> list:
         return None
 
 
+def _build_lp_excel(lp_calc: pd.DataFrame, all_clients_pnl):
+    """Build a styled openpyxl workbook matching the B-Book report format."""
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment
+
+    NAVY   = PatternFill("solid", fgColor="0B1220")
+    MID    = PatternFill("solid", fgColor="1E3A5F")
+    W_BOLD = Font(color="FFFFFF", bold=True, size=11)
+    BOLD   = Font(bold=True)
+    CTR    = Alignment(horizontal="center")
+    NUM_FMT = "#,##0.00"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "LP & Brokers PNL"
+
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 3
+    ws.column_dimensions["E"].width = 18
+    ws.column_dimensions["F"].width = 14
+
+    # ── LP Summary blocks (columns B-C, one block per LP) ──
+    start_row = 3
+    for _, row in lp_calc.iterrows():
+        oe        = float(row["Opening Equity"])
+        ce        = float(row["Closing Equity"])
+        diff      = float(row["Difference"])
+        deposit   = float(row["Deposit"])
+        credit_in = float(row["Credit IN"])
+        additional= float(row["Additional"])
+        withdrawal= float(row["Withdrawal"])
+        credit_out= float(row["Credit OUT"])
+        net_brok  = float(row["Net Brokerage"])
+
+        r = start_row
+
+        ws.merge_cells(f"B{r}:C{r}")
+        ws[f"B{r}"].value = "LP Summery"
+        ws[f"B{r}"].fill  = MID
+        ws[f"B{r}"].font  = W_BOLD
+        ws[f"B{r}"].alignment = CTR
+
+        ws.merge_cells(f"B{r+1}:C{r+1}")
+        ws[f"B{r+1}"].value = row.get("LP Name") or "LP"
+        ws[f"B{r+1}"].fill  = NAVY
+        ws[f"B{r+1}"].font  = W_BOLD
+        ws[f"B{r+1}"].alignment = CTR
+
+        fields = [
+            ("Opening Equity", oe,         False),
+            ("Closing Equity", ce,         False),
+            ("Difference",     diff,       True),
+            ("Deposit",        deposit,    False),
+            ("Credit IN",      credit_in,  False),
+            ("Additional",     additional, False),
+            ("Withdrawal",     withdrawal, False),
+            ("Credit OUT",     credit_out, False),
+            ("Net Brokerage",  net_brok,   True),
+        ]
+        for i, (label, val, bold) in enumerate(fields):
+            rr = r + 2 + i
+            lc = ws[f"B{rr}"]
+            vc = ws[f"C{rr}"]
+            lc.value = label
+            vc.value = round(val, 2)
+            vc.number_format = NUM_FMT
+            if bold:
+                lc.font = BOLD
+                vc.font = BOLD
+
+        start_row = r + 2 + len(fields) + 2
+
+    # ── Total Brokers PNL table (columns E-F, starting at row 3) ──
+    total_lp = lp_calc["Net Brokerage"].sum()
+
+    r = 3
+    ws.merge_cells(f"E{r}:F{r}")
+    ws[f"E{r}"].value = "Total Brokers PNL"
+    ws[f"E{r}"].fill  = NAVY
+    ws[f"E{r}"].font  = W_BOLD
+    ws[f"E{r}"].alignment = CTR
+
+    r += 1
+    for col, hdr in [("E", "LP Name"), ("F", "PNL")]:
+        ws[f"{col}{r}"].value = hdr
+        ws[f"{col}{r}"].fill  = NAVY
+        ws[f"{col}{r}"].font  = W_BOLD
+
+    r += 1
+    for _, row in lp_calc.iterrows():
+        ws[f"E{r}"].value = row.get("LP Name") or "—"
+        ws[f"F{r}"].value = round(float(row["Net Brokerage"]), 2)
+        ws[f"F{r}"].number_format = NUM_FMT
+        r += 1
+
+    r += 1  # blank row
+    ws[f"E{r}"].value = "Total"
+    ws[f"E{r}"].font  = BOLD
+    ws[f"F{r}"].value = round(total_lp, 2)
+    ws[f"F{r}"].font  = BOLD
+    ws[f"F{r}"].number_format = NUM_FMT
+
+    r += 2  # blank row
+    ws[f"E{r}"].value = "All Clients PNL"
+    if all_clients_pnl is not None:
+        ws[f"F{r}"].value = round(all_clients_pnl, 2)
+        ws[f"F{r}"].number_format = NUM_FMT
+    else:
+        ws[f"F{r}"].value = "N/A"
+
+    r += 2  # blank row
+    net_total = round(total_lp - (all_clients_pnl or 0), 2)
+    ws[f"E{r}"].value = "Net Brokerage"
+    ws[f"E{r}"].font  = BOLD
+    ws[f"F{r}"].value = net_total
+    ws[f"F{r}"].fill  = NAVY
+    ws[f"F{r}"].font  = W_BOLD
+    ws[f"F{r}"].number_format = NUM_FMT
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
 # ═══════════════════════════════════════════════════════════
 # GENERATE REPORT
 # ═══════════════════════════════════════════════════════════
@@ -945,6 +1072,7 @@ if generate:
                 )
                 eq_groups  = compute_equity_group_summary(eq_report)
                 eq_kpis    = compute_equity_kpis(eq_report)
+                st.session_state["eq_total_net_pnl"] = eq_kpis["total_net_pnl"]
 
             if eq_report.empty:
                 st.warning("No equity data found for the selected accounts and dates.")
@@ -1175,6 +1303,31 @@ if generate:
                     pd.DataFrame({"Login (Not Fetched)": missed_logins}).to_excel(
                         w, index=False, sheet_name="Not Fetched"
                     )
+                pass  # LP sheets appended below via styled helper
+            # If LP data exists, merge LP sheet into buf_all
+            _lp_data = st.session_state.get("lp_df_computed")
+            _lp_named_all = _lp_data[_lp_data["LP Name"].astype(str).str.strip() != ""] if _lp_data is not None else None
+            if _lp_named_all is not None and not _lp_named_all.empty:
+                from openpyxl import load_workbook
+                _lp_wb_buf = _build_lp_excel(_lp_named_all, st.session_state.get("eq_total_net_pnl"))
+                _lp_wb     = load_workbook(_lp_wb_buf)
+                _main_wb   = load_workbook(buf_all)
+                _lp_ws     = _lp_wb.active
+                _new_ws    = _main_wb.create_sheet("LP & Brokers PNL")
+                for row in _lp_ws.iter_rows():
+                    for cell in row:
+                        _nc = _new_ws.cell(row=cell.row, column=cell.column, value=cell.value)
+                        if cell.has_style:
+                            _nc.font       = cell.font.copy()
+                            _nc.fill       = cell.fill.copy()
+                            _nc.alignment  = cell.alignment.copy()
+                            _nc.number_format = cell.number_format
+                for col, dim in _lp_ws.column_dimensions.items():
+                    _new_ws.column_dimensions[col].width = dim.width
+                for rng in _lp_ws.merged_cells.ranges:
+                    _new_ws.merge_cells(str(rng))
+                buf_all = BytesIO()
+                _main_wb.save(buf_all)
             buf_all.seek(0)
             st.download_button(
                 "Download All — Full Report (Excel)",
@@ -1252,4 +1405,136 @@ else:
 
 **Account filter:** If no file is uploaded, all accounts with daily data are included.
 """
+        )
+
+
+# ═══════════════════════════════════════════════════════════
+# LP SUMMARY (B BOOK REPORT) — Equity P&L mode only
+# ═══════════════════════════════════════════════════════════
+if report_type == "Equity P&L":
+    st.markdown(
+        """<div class="section"><div class="section-title">
+        <h2>LP Summary</h2><span class="pill">Manual Entry</span>
+        </div></div>""",
+        unsafe_allow_html=True,
+    )
+
+    _lp_num_cols = ["Opening Equity", "Closing Equity", "Deposit", "Credit IN",
+                    "Additional", "Withdrawal", "Credit OUT"]
+    _lp_blank = {"LP Name": "", **{c: 0.0 for c in _lp_num_cols}}
+
+    if "lp_df" not in st.session_state:
+        # Pre-populate 20 empty rows so users can paste data directly
+        st.session_state["lp_df"] = pd.DataFrame([dict(_lp_blank) for _ in range(20)])
+
+    st.caption(
+        "Enter or paste LP equity data below (up to 20 LPs). "
+        "Blank numeric cells default to 0. Net Brokerage is calculated automatically."
+    )
+
+    _edited = st.data_editor(
+        st.session_state["lp_df"],
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "LP Name":        st.column_config.TextColumn("LP Name"),
+            "Opening Equity": st.column_config.NumberColumn("Opening Equity", format="%.2f", default=0.0),
+            "Closing Equity": st.column_config.NumberColumn("Closing Equity", format="%.2f", default=0.0),
+            "Deposit":        st.column_config.NumberColumn("Deposit",        format="%.2f", default=0.0),
+            "Credit IN":      st.column_config.NumberColumn("Credit IN",      format="%.2f", default=0.0),
+            "Additional":     st.column_config.NumberColumn("Additional",     format="%.2f", default=0.0),
+            "Withdrawal":     st.column_config.NumberColumn("Withdrawal",     format="%.2f", default=0.0),
+            "Credit OUT":     st.column_config.NumberColumn("Credit OUT",     format="%.2f", default=0.0),
+        },
+        key="lp_editor",
+    )
+    # Fill any None/NaN in numeric columns with 0
+    _edited[_lp_num_cols] = _edited[_lp_num_cols].fillna(0.0)
+    st.session_state["lp_df"] = _edited
+
+    # ── Compute derived columns ──
+    _lp_calc = _edited.copy()
+    _lp_calc["Difference"] = _lp_calc["Closing Equity"] - _lp_calc["Opening Equity"]
+    _lp_calc["Net Brokerage"] = (
+        _lp_calc["Difference"]
+        - _lp_calc["Deposit"]
+        - _lp_calc["Credit IN"]
+        - _lp_calc["Additional"]
+        + _lp_calc["Withdrawal"]
+        + _lp_calc["Credit OUT"]
+    )
+    st.session_state["lp_df_computed"] = _lp_calc
+
+    # ── Results: per-LP summary + Total Brokers PNL ──
+    _total_lp_pnl    = _lp_calc["Net Brokerage"].sum()
+    _all_clients_pnl = st.session_state.get("eq_total_net_pnl", None)
+
+    # Per-LP cards
+    _lp_named = _lp_calc[_lp_calc["LP Name"].astype(str).str.strip() != ""]
+    if not _lp_named.empty:
+        st.markdown("**LP Results**")
+        _card_cols = st.columns(min(len(_lp_named), 3))
+        for _ci, (_, _lrow) in enumerate(_lp_named.iterrows()):
+            with _card_cols[_ci % len(_card_cols)]:
+                _nb_color = "#059669" if _lrow["Net Brokerage"] >= 0 else "#dc2626"
+                st.markdown(
+                    f'<div class="metric">'
+                    f'<div class="k">{_lrow["LP Name"]}</div>'
+                    f'<div class="v" style="color:{_nb_color};">${_lrow["Net Brokerage"]:,.2f}</div>'
+                    f'<div class="s">Diff: ${_lrow["Difference"]:,.2f} &nbsp;|&nbsp; '
+                    f'OE: ${_lrow["Opening Equity"]:,.2f} &nbsp;|&nbsp; CE: ${_lrow["Closing Equity"]:,.2f}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # Total Brokers PNL table
+    st.markdown("#### Total Brokers PNL")
+    _brokers_rows = []
+    for _, _row in _lp_named.iterrows():
+        _brokers_rows.append({"Item": _row["LP Name"], "PNL": _row["Net Brokerage"]})
+    _brokers_rows.append({"Item": "Total", "PNL": _total_lp_pnl})
+
+    if _all_clients_pnl is not None:
+        _brokers_rows.append({"Item": "All Clients PNL", "PNL": _all_clients_pnl})
+        _net_brokerage = _total_lp_pnl - _all_clients_pnl
+        _brokers_rows.append({"Item": "Net Brokerage",   "PNL": _net_brokerage})
+        # Show as metrics
+        _mb1, _mb2, _mb3 = st.columns(3)
+        _nb_col = "green" if _net_brokerage >= 0 else "red"
+        with _mb1:
+            st.markdown(
+                f'<div class="metric"><div class="k">Total LP PNL</div>'
+                f'<div class="v">${_total_lp_pnl:,.2f}</div></div>',
+                unsafe_allow_html=True,
+            )
+        with _mb2:
+            st.markdown(
+                f'<div class="metric"><div class="k">All Clients PNL</div>'
+                f'<div class="v">${_all_clients_pnl:,.2f}</div></div>',
+                unsafe_allow_html=True,
+            )
+        with _mb3:
+            st.markdown(
+                f'<div class="metric"><div class="k">Net Brokerage</div>'
+                f'<div class="v {_nb_col}">${_net_brokerage:,.2f}</div>'
+                f'<div class="s">Total LP PNL − All Clients PNL</div></div>',
+                unsafe_allow_html=True,
+            )
+    else:
+        _brokers_df_tmp = pd.DataFrame(_brokers_rows)
+        st.dataframe(_brokers_df_tmp.style.format({"PNL": "${:,.2f}"}), use_container_width=True)
+        st.info("Generate the Equity P&L report first to see All Clients PNL and Net Brokerage.")
+
+    _brokers_df = pd.DataFrame(_brokers_rows)
+    st.session_state["lp_brokers_pnl"] = _brokers_df
+
+    # ── Standalone export (styled) ──
+    if not _lp_named.empty:
+        _lp_buf = _build_lp_excel(_lp_named, _all_clients_pnl)
+        st.download_button(
+            "Download LP Summary Excel",
+            data=_lp_buf,
+            file_name="LP_Summary.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
         )
