@@ -323,3 +323,34 @@ def compute_equity_kpis(eq_report: pd.DataFrame) -> Dict:
         "profitable_accounts": int((eq_report["Net P&L"] > 0).sum()),
         "losing_accounts":    int((eq_report["Net P&L"] < 0).sum()),
     }
+
+
+def compute_account_category_summary(
+    eq_report: pd.DataFrame, new_reg_count: int = 0
+) -> pd.DataFrame:
+    """
+    Categorises accounts by Closing Equity level and activity.
+    Returns a two-column DataFrame: Category | Number of Accounts.
+    """
+    ce  = eq_report["Closing Equity"]
+    ndw = eq_report["Net D/W"].abs()
+    ncr = eq_report["Net Credit"].abs()
+    bon = eq_report["Bonus"].abs()
+
+    zero_eq  = int((ce == 0).sum())
+    low_eq   = int(((ce > 0) & (ce <= 100)).sum())
+    high_eq  = int((ce > 100).sum())
+    total    = len(eq_report)
+    active   = int(((ce > 0) | (ndw > 0) | (ncr > 0) | (bon > 0)).sum())
+    inactive = total - active
+
+    rows = [
+        ("0 Equity",          zero_eq),
+        ("0 - 100 Equity",    low_eq),
+        ("100 Above Equity",  high_eq),
+        ("Total",             total),
+        ("Active Accounts",   active),
+        ("Inactive Accounts", inactive),
+        ("New Registered Ac", new_reg_count),
+    ]
+    return pd.DataFrame(rows, columns=["Category", "Number of Accounts"])

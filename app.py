@@ -18,6 +18,7 @@ from mt5_connector import (
     disconnect_mt5,
     get_deals,
     get_users,
+    get_user_registrations,
     deals_to_dicts,
     get_daily_reports,
     daily_to_dicts,
@@ -33,6 +34,7 @@ from calculations import (
     compute_equity_report,
     compute_equity_group_summary,
     compute_equity_kpis,
+    compute_account_category_summary,
 )
 from db import (
     init_db,
@@ -1074,6 +1076,18 @@ if generate:
                 eq_kpis    = compute_equity_kpis(eq_report)
                 st.session_state["eq_total_net_pnl"] = eq_kpis["total_net_pnl"]
 
+            # ── Fetch registration dates ──
+            with st.spinner("Fetching account registration data…"):
+                _reg_map, _reg_err = get_user_registrations(manager, logins_list)
+            if _reg_err:
+                st.warning(f"⚠️ Registration fetch: {_reg_err}")
+            _oe_ts = int(datetime.combine(oe_date, datetime.min.time()).timestamp())
+            _ce_ts = int(datetime.combine(ce_date, datetime.max.time()).timestamp())
+            _new_reg_count = sum(
+                1 for ts in _reg_map.values() if ts and _oe_ts <= ts <= _ce_ts
+            )
+            _acct_summary = compute_account_category_summary(eq_report, _new_reg_count)
+
             if eq_report.empty:
                 st.warning("No equity data found for the selected accounts and dates.")
                 disconnect_mt5(manager)
@@ -1212,6 +1226,17 @@ if generate:
                 )
 
             # ════════════════════════════════
+            # ACCOUNT CATEGORY SUMMARY
+            # ════════════════════════════════
+            st.markdown(
+                """<div class="section"><div class="section-title">
+                <h2>Account Summary</h2><span class="pill">Equity Categories</span>
+                </div></div>""",
+                unsafe_allow_html=True,
+            )
+            st.dataframe(_acct_summary, use_container_width=True, hide_index=True)
+
+            # ════════════════════════════════
             # FULL ACCOUNT TABLE
             # ════════════════════════════════
             st.markdown(
@@ -1257,6 +1282,7 @@ if generate:
                     eq_report.to_excel(w, index=False, sheet_name="Equity PnL")
                     if not eq_groups.empty:
                         eq_groups.to_excel(w, index=False, sheet_name="Group Summary")
+                    _acct_summary.to_excel(w, index=False, sheet_name="Account Summary")
                     if missed_logins:
                         pd.DataFrame({"Login (Not Fetched)": missed_logins}).to_excel(
                             w, index=False, sheet_name="Not Fetched"
@@ -1299,6 +1325,7 @@ if generate:
                 eq_report.to_excel(w, index=False, sheet_name="Full Account Report")
                 if not eq_groups.empty:
                     eq_groups.to_excel(w, index=False, sheet_name="Group Summary")
+                _acct_summary.to_excel(w, index=False, sheet_name="Account Summary")
                 if missed_logins:
                     pd.DataFrame({"Login (Not Fetched)": missed_logins}).to_excel(
                         w, index=False, sheet_name="Not Fetched"

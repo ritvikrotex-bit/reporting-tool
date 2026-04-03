@@ -160,6 +160,32 @@ def get_users(
     return user_map, None
 
 
+def get_user_registrations(
+    manager: Any, logins: List[int]
+) -> Tuple[Dict[int, int], Optional[str]]:
+    """
+    Returns {login: registration_unix_timestamp} for given logins.
+    Uses UserGetByLoginsNumPy — extracts Registration field.
+    Returns 0 for accounts where the field is unavailable.
+    """
+    if not logins:
+        return {}, None
+    try:
+        result = manager.UserGetByLoginsNumPy(logins)
+        if result is None or isinstance(result, (bool, int)):
+            return {}, None
+        reg_map: Dict[int, int] = {}
+        for row in result:
+            lgn = _field(row, "Login", "login")
+            reg = _field(row, "Registration", "RegistrationDate",
+                         "registration", "RegisterDate", default=0)
+            if lgn is not None:
+                reg_map[int(lgn)] = int(reg or 0)
+        return reg_map, None
+    except Exception as e:
+        return {}, str(e)
+
+
 # ─────────────────────────────────────────────────────────────
 # NORMALISE DEALS → DICTS
 # ─────────────────────────────────────────────────────────────
